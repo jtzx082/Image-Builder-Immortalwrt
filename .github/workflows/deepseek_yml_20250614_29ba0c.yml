@@ -9,7 +9,7 @@ env:
   UCI_CUSTOM_FILE: uci-custom
   PACKAGES_LIST_FILE: packages.list
   PACKAGES_FOLDER: packages
-  ROOTFS_PARTSIZE: 2048
+  ROOTFS_PARTSIZE: 2048   # Reconfigure the rootfs partition size (for x86 build only), variable set in MB
   DOWNLOAD_URL: https://downloads.immortalwrt.org/releases/24.10.1/targets/x86/64/immortalwrt-imagebuilder-24.10.1-x86-64.Linux-x86_64.tar.zst
   TZ: Asia/Shanghai
 
@@ -69,42 +69,27 @@ jobs:
         cd $ROOT_DIRECTORY
         PACKAGES=$(cat $ROOT_DIRECTORY/files/packages.list | tr '\n' ' ')
         sudo make image PROFILE="$PROFILE" PACKAGES="$PACKAGES" FILES="files"
-        # 使用精确到秒的时间格式
-        echo "FILE_DATE=$(date +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+        echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
         # Organize files
         sudo mkdir -p /tmp/bin_firmware
         sudo find bin -type f -exec sudo cp {} /tmp/bin_firmware/ \;
 
-    - name: Upload firmware artifact
+    - name: Upload firmware
       uses: actions/upload-artifact@v4
       with:
         name: ImmortalWrt-firmware-${{ env.PROFILE }}-${{ env.FILE_DATE }}
         path: /tmp/bin_firmware
 
-    - name: Create GitHub Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create Release and Upload Firmware
+      uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ env.FILE_DATE }}
-        release_name: ImmortalWrt ${{ env.PROFILE }} (${{ env.FILE_DATE }})
+        tag_name: "auto-release-${{ env.FILE_DATE }}"
+        name: "ImmortalWrt-${{ env.PROFILE }}-${{ env.FILE_DATE }}"
         body: |
-          Automatically generated ImmortalWrt build
-          - Build date: ${{ env.FILE_DATE }}
-          - Profile: ${{ env.PROFILE }}
-        draft: false
-        prerelease: false
-
-    - name: Upload Firmware to Release
-      uses: actions/upload-release-asset@v1
+          自动发布固件，PROFILE=${{ env.PROFILE }}，构建时间=${{ env.FILE_DATE }}
+        files: /tmp/bin_firmware/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: /tmp/bin_firmware/*
-        asset_name: ${{ env.PROFILE }}-firmware-${{ env.FILE_DATE }}.zip
-        asset_content_type: application/zip
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
