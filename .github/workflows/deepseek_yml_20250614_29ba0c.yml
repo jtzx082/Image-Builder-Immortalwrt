@@ -1,8 +1,7 @@
-name: ImmortalWrt Image Builder (OpenWrt 24.10.1)
+name: ImmortalWrt Image Builder (v24.10.1)
 on:
   push:
     branches: [ "master" ]
-    tags: [ "v*" ]  # 添加标签触发条件
   workflow_dispatch:
 
 env:
@@ -21,6 +20,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取所有提交历史，用于创建标签
 
     - name: Initialization environment
       env:
@@ -81,16 +82,38 @@ jobs:
         name: ImmortalWrt-firmware-${{ env.PROFILE }}-${{ env.FILE_DATE }}
         path: /tmp/bin_firmware
 
-    # 新增发布到Releases的步骤
+    # 新增：创建并推送标签以触发发布
+    - name: Create and push version tag
+      run: |
+        # 生成基于时间的唯一标签
+        TAG_NAME="v$(date +'%Y.%m.%d')-${{ env.FILE_DATE }}"
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git tag $TAG_NAME
+        git push origin $TAG_NAME
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # 新增：等待标签推送触发的新工作流
+    - name: Wait for release workflow
+      uses: fountainhead/action-wait-for-check@v1.1.0
+      id: wait-for-release
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        checkName: "ImmortalWrt Image Builder (OpenWrt 24)"
+        ref: ${{ env.GITHUB_REF }}
+        timeoutSeconds: 600
+        intervalSeconds: 10
+
+    # 新增：发布到GitHub Releases
     - name: Publish to GitHub Releases
-      if: ${{ startsWith(github.ref, 'refs/tags/') }}  # 仅在标签推送时执行
       uses: softprops/action-gh-release@v1
       with:
         files: /tmp/bin_firmware/*
-        tag_name: ${{ github.ref }}
-        name: ImmortalWrt ${{ github.ref_name }} (${{ env.PROFILE }})
+        tag_name: ${{ steps.wait-for-release.outputs.headSha }}
+        name: ImmortalWrt ${{ env.FILE_DATE }} (${{ env.PROFILE }})
         body: |
-          ImmortalWrt ${{ github.ref_name }} built on ${{ env.FILE_DATE }}
+          ImmortalWrt built on ${{ env.FILE_DATE }}
           Target profile: ${{ env.PROFILE }}
         draft: false
         prerelease: false
