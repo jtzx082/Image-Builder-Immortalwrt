@@ -106,6 +106,7 @@ luci-app-partexp
 luci-i18n-partexp-zh-cn
 kmod-usb-printer
 luci-app-usb-printer
+-openvpn-openssl 
 luci-i18n-usb-printer-zh-cn
 script-utils
 luci-i18n-samba4-zh-cn
