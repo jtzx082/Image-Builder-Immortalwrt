@@ -25,9 +25,9 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential libncurses5-dev libncursesw5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc wget unzip python3 qemu-utils genisoimage zstd
-
+        sudo apt-get update  
+        sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+        
     - name: Download and extract Image Builder
       run: |
         wget -O /tmp/imagebuilder.tar.zst $DOWNLOAD_URL
@@ -91,7 +91,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Delete workflow runs
+    - name: 删除 workflow runs
       uses: Mattraks/delete-workflow-runs@main
       with:
         retain_days: 0
