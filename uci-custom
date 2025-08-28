@@ -17,6 +17,12 @@ if [ -n "$root_password" ]; then
   (echo "$root_password"; sleep 1; echo "$root_password") | passwd > /dev/null
 fi
 
+# Configure network interfaces
+# Set eth1 as WAN, eth0, eth2, eth3 as LAN
+uci set network.lan.ifname='eth0 eth2 eth3'
+uci set network.wan.ifname='eth1'
+uci set network.wan.proto='dhcp'
+
 # Configure LAN
 # More options: https://openwrt.org/docs/guide-user/base-system/basic-networking
 if [ -n "$lan_ip_address" ]; then
