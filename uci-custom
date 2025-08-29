@@ -20,7 +20,34 @@ fi
 # Configure LAN
 # More options: https://openwrt.org/docs/guide-user/base-system/basic-networking
 if [ -n "$lan_ip_address" ]; then
+  # Set globals
+  uci set network.globals=globals
+  uci set network.globals.ula_prefix='fdca:75f0:16c4::/48'
+  uci set network.globals.packet_steering='1'
+
+  # Set bridge device
+  uci add network device
+  uci set network.@device[-1].name='br-lan'
+  uci set network.@device[-1].type='bridge'
+  uci add_list network.@device[-1].ports='eth0'
+  uci add_list network.@device[-1].ports='eth2'
+  uci add_list network.@device[-1].ports='eth3'
+
+  # Set LAN interface
+  uci set network.lan.device='br-lan'
+  uci set network.lan.proto='static'
   uci set network.lan.ipaddr="$lan_ip_address"
+  uci set network.lan.netmask='255.255.255.0'
+  uci set network.lan.ip6assign='60'
+
+  # Set WAN interface
+  uci set network.wan.device='eth1'
+  uci set network.wan.proto='dhcp'
+
+  # Set WAN6 interface
+  uci set network.wan6.device='eth1'
+  uci set network.wan6.proto='dhcpv6'
+
   uci commit network
 fi
 
