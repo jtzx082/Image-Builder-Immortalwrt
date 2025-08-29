@@ -4,8 +4,8 @@
 # wlan_name="ImmortalWrt"
 # wlan_password="12345678"
 #
- root_password="password"
- lan_ip_address="10.0.0.1"
+# root_password=""
+# lan_ip_address="192.168.1.1"
 #
 # pppoe_username=""
 # pppoe_password=""
@@ -17,17 +17,14 @@ if [ -n "$root_password" ]; then
   (echo "$root_password"; sleep 1; echo "$root_password") | passwd > /dev/null
 fi
 
-# Configure LAN bridge with eth0, eth2, eth3
-# More options: https://openwrt.org/docs/guide-user/network/wifi/bridgedap
-uci set network.lan=interface
-uci set network.lan.type='bridge'
-uci set network.lan.ifname='eth0 eth2 eth3'
+# Configure LAN
+# More options: https://openwrt.org/docs/guide-user/base-system/basic-networking
+  uci set network.lan=interface
+  uci set network.lan.type='bridge'
+  uci set network.lan.ifname='eth0 eth2 eth3'
 if [ -n "$lan_ip_address" ]; then
   uci set network.lan.ipaddr="$lan_ip_address"
-fi
-uci set network.lan.netmask='255.255.255.0'
-uci set network.lan.proto='static'
-uci commit network
+  uci commit network
 fi
 
 # Configure WLAN
