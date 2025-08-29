@@ -25,13 +25,25 @@ if [ -n "$lan_ip_address" ]; then
   uci set network.globals.ula_prefix='fdca:75f0:16c4::/48'
   uci set network.globals.packet_steering='1'
 
-  # Set bridge device
-  uci add network device
-  uci set network.@device[-1].name='br-lan'
-  uci set network.@device[-1].type='bridge'
-  uci add_list network.@device[-1].ports='eth0'
-  uci add_list network.@device[-1].ports='eth2'
-  uci add_list network.@device[-1].ports='eth3'
+  # Update existing bridge device or create if it doesn't exist
+  if uci -q get network.br_lan >/dev/null; then
+    # Update existing br-lan device
+    uci set network.br_lan.type='bridge'
+    # Clear existing ports to avoid duplicates
+    uci -q delete network.br_lan.ports
+    # Add required ports
+    uci add_list network.br_lan.ports='eth0'
+    uci add_list network.br_lan.ports='eth2'
+    uci add_list network.br_lan.ports='eth3'
+  else
+    # Create br-lan device if it doesn't exist
+    uci add network device
+    uci set network.@device[-1].name='br-lan'
+    uci set network.@device[-1].type='bridge'
+    uci add_list network.@device[-1].ports='eth0'
+    uci add_list network.@device[-1].ports='eth2'
+    uci add_list network.@device[-1].ports='eth3'
+  fi
 
   # Set LAN interface
   uci set network.lan.device='br-lan'
