@@ -25,9 +25,10 @@ if [ -n "$lan_ip_address" ]; then
   uci set network.globals.ula_prefix='fdca:75f0:16c4::/48'
   uci set network.globals.packet_steering='1'
 
-  # Update existing bridge device or create if it doesn't exist
+  # Check if br-lan device exists and update it, or create it
   if uci -q get network.br_lan >/dev/null; then
     # Update existing br-lan device
+    uci set network.br_lan.name='br-lan'
     uci set network.br_lan.type='bridge'
     # Clear existing ports to avoid duplicates
     uci -q delete network.br_lan.ports
