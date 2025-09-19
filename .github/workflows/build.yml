@@ -48,15 +48,15 @@ jobs:
     - name: Update and install feeds
       run: |
         cd $SDK_DIRECTORY
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+        sudo ./scripts/feeds update -a
+        sudo ./scripts/feeds install -a
 
     - name: Compile Nikki packages
       run: |
         cd $SDK_DIRECTORY
-        make package/nikki/compile V=s
-        make package/luci-app-nikki/compile V=s
-        make package/luci-i18n-nikki-zh-cn/compile V=s
+        sudo make package/nikki/compile V=s
+        sudo make package/luci-app-nikki/compile V=s
+        sudo make package/luci-i18n-nikki-zh-cn/compile V=s
 
     - name: Copy Nikki ipk files
       run: |
