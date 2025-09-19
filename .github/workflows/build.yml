@@ -43,7 +43,7 @@ jobs:
     - name: Add Nikki feed to SDK
       run: |
         cd $SDK_DIRECTORY
-        echo "src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main" >> feeds.conf.default
+        sudo sh -c "echo 'src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main' >> feeds.conf.default"
 
     - name: Update and install feeds
       run: |
@@ -65,7 +65,7 @@ jobs:
 
     - name: Add Nikki packages to list
       run: |
-        echo "nikki luci-app-nikki luci-i18n-nikki-zh-cn" >> $PACKAGES_LIST_FILE
+        sudo sh -c "echo 'nikki luci-app-nikki luci-i18n-nikki-zh-cn' >> $PACKAGES_LIST_FILE"
 
     - name: Download and extract Image Builder
       run: |
@@ -93,7 +93,7 @@ jobs:
 
     - name: Copy files
       run: |
-        # Creator folders
+        # Create folders
         sudo mkdir -p $ROOT_DIRECTORY/files/etc/uci-defaults
         sudo mkdir -p $ROOT_DIRECTORY/packages
         # Copy custom setting file
