@@ -42,13 +42,12 @@ jobs:
     - name: Modify .config file
       run: |
         CONFIG_FILE="$ROOT_DIRECTORY/.config"
-        # Ensure uci and libuci are enabled in .config
-        if ! grep -q "CONFIG_PACKAGE_uci=y" $CONFIG_FILE; then
-          echo "CONFIG_PACKAGE_uci=y" | sudo tee -a $CONFIG_FILE > /dev/null
-        fi
-        if ! grep -q "CONFIG_PACKAGE_libuci=y" $CONFIG_FILE; then
-          echo "CONFIG_PACKAGE_libuci=y" | sudo tee -a $CONFIG_FILE > /dev/null
-        fi
+        # Disable iso and virtual disk image generation for x86
+        # sudo sed -i 's/^CONFIG_ISO_IMAGES=y/# CONFIG_ISO_IMAGES is not set/' $CONFIG_FILE
+        # sudo sed -i 's/^CONFIG_QCOW2_IMAGES=y/# CONFIG_QCOW2_IMAGES is not set/' $CONFIG_FILE
+        # sudo sed -i 's/^CONFIG_VDI_IMAGES=y/# CONFIG_VDI_IMAGES is not set/' $CONFIG_FILE
+        # sudo sed -i 's/^CONFIG_VMDK_IMAGES=y/# CONFIG_VMDK_IMAGES is not set/' $CONFIG_FILE
+        # sudo sed -i 's/^CONFIG_VHDX_IMAGES=y/# CONFIG_VHDX_IMAGES is not set/' $CONFIG_FILE
         # Reconfigure the rootfs partition size (for x86 build only)
         if [ -n "${{ env.ROOTFS_PARTSIZE }}" ] && [ "${{ env.PROFILE }}" = "generic" ]; then
           sudo sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=${{ env.ROOTFS_PARTSIZE }}/g' $CONFIG_FILE
@@ -56,23 +55,13 @@ jobs:
 
     - name: Copy files
       run: |
-        # Create folders
+        # Creator folders
         sudo mkdir -p $ROOT_DIRECTORY/files/etc/uci-defaults
         sudo mkdir -p $ROOT_DIRECTORY/packages
         # Copy custom setting file
         sudo cp $UCI_CUSTOM_FILE $ROOT_DIRECTORY/files/etc/uci-defaults
-        # Copy and verify packages list
+        # Copy packages list
         sudo cp $PACKAGES_LIST_FILE $ROOT_DIRECTORY/files/packages.list
-        # Ensure uci and libuci are included in packages.list
-        if ! grep -q "^uci$" $ROOT_DIRECTORY/files/packages.list; then
-          echo "uci" | sudo tee -a $ROOT_DIRECTORY/files/packages.list > /dev/null
-        fi
-        if ! grep -q "^libuci$" $ROOT_DIRECTORY/files/packages.list; then
-          echo "libuci" | sudo tee -a $ROOT_DIRECTORY/files/packages.list > /dev/null
-        fi
-        # Log packages.list content for debugging
-        echo "Content of packages.list:"
-        cat $ROOT_DIRECTORY/files/packages.list
         # Copy ipk files
         sudo cp $PACKAGES_FOLDER/*.ipk $ROOT_DIRECTORY/packages
 
@@ -80,20 +69,11 @@ jobs:
       run: |
         cd $ROOT_DIRECTORY
         PACKAGES=$(cat $ROOT_DIRECTORY/files/packages.list | tr '\n' ' ')
-        # Force include uci and libuci in PACKAGES
-        PACKAGES="$PACKAGES uci libuci"
         sudo make image PROFILE="$PROFILE" PACKAGES="$PACKAGES" FILES="files"
         echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
         # Organize files
         sudo mkdir -p /tmp/bin_firmware
         sudo find bin -type f -exec sudo cp {} /tmp/bin_firmware/ \;
-        # Verify uci in root filesystem
-        if [ -f "build_dir/target-x86_64_musl/root-x86/sbin/uci" ]; then
-          echo "uci binary found in root filesystem"
-        else
-          echo "ERROR: uci binary NOT found in root filesystem"
-          exit 1
-        fi
 
     - name: Upload firmware
       uses: actions/upload-artifact@v4
