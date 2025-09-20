@@ -9,7 +9,7 @@ env:
   UCI_CUSTOM_FILE: uci-custom
   PACKAGES_LIST_FILE: packages.list
   PACKAGES_FOLDER: packages
-  ROOTFS_PARTSIZE: 1024   # Reconfigure the rootfs partition size (for x86 build only), variable set in MB
+  ROOTFS_PARTSIZE: 1024
   DOWNLOAD_URL: https://downloads.immortalwrt.org/releases/24.10.2/targets/x86/64/immortalwrt-imagebuilder-24.10.2-x86-64.Linux-x86_64.tar.zst
   TZ: Asia/Shanghai
 
@@ -28,7 +28,7 @@ jobs:
         sudo apt-get update -y
         sudo apt-get full-upgrade -y
         sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 python3-lib2to3 zstd qemu-utils genisoimage
-        
+
     - name: Download and extract Image Builder
       run: |
         wget -O /tmp/imagebuilder.tar.zst $DOWNLOAD_URL
@@ -42,28 +42,25 @@ jobs:
     - name: Modify .config file
       run: |
         CONFIG_FILE="$ROOT_DIRECTORY/.config"
-        # Disable iso and virtual disk image generation for x86
-        # sudo sed -i 's/^CONFIG_ISO_IMAGES=y/# CONFIG_ISO_IMAGES is not set/' $CONFIG_FILE
-        # sudo sed -i 's/^CONFIG_QCOW2_IMAGES=y/# CONFIG_QCOW2_IMAGES is not set/' $CONFIG_FILE
-        # sudo sed -i 's/^CONFIG_VDI_IMAGES=y/# CONFIG_VDI_IMAGES is not set/' $CONFIG_FILE
-        # sudo sed -i 's/^CONFIG_VMDK_IMAGES=y/# CONFIG_VMDK_IMAGES is not set/' $CONFIG_FILE
-        # sudo sed -i 's/^CONFIG_VHDX_IMAGES=y/# CONFIG_VHDX_IMAGES is not set/' $CONFIG_FILE
-        # Reconfigure the rootfs partition size (for x86 build only)
         if [ -n "${{ env.ROOTFS_PARTSIZE }}" ] && [ "${{ env.PROFILE }}" = "generic" ]; then
           sudo sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=${{ env.ROOTFS_PARTSIZE }}/g' $CONFIG_FILE
         fi
 
     - name: Copy files
       run: |
-        # Creator folders
+        # Create folders
         sudo mkdir -p $ROOT_DIRECTORY/files/etc/uci-defaults
         sudo mkdir -p $ROOT_DIRECTORY/packages
-        # Copy custom setting file
-        sudo cp $UCI_CUSTOM_FILE $ROOT_DIRECTORY/files/etc/uci-defaults
+        # Copy custom uci setting script (should be a shell script for uci-defaults)
+        sudo cp $UCI_CUSTOM_FILE $ROOT_DIRECTORY/files/etc/uci-defaults/99-custom
         # Copy packages list
         sudo cp $PACKAGES_LIST_FILE $ROOT_DIRECTORY/files/packages.list
         # Copy ipk files
         sudo cp $PACKAGES_FOLDER/*.ipk $ROOT_DIRECTORY/packages
+
+    - name: Check uci package
+      run: |
+        grep -q '^uci$' $ROOT_DIRECTORY/files/packages.list || echo 'uci' | sudo tee -a $ROOT_DIRECTORY/files/packages.list
 
     - name: Compile firmware
       run: |
@@ -71,7 +68,6 @@ jobs:
         PACKAGES=$(cat $ROOT_DIRECTORY/files/packages.list | tr '\n' ' ')
         sudo make image PROFILE="$PROFILE" PACKAGES="$PACKAGES" FILES="files"
         echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        # Organize files
         sudo mkdir -p /tmp/bin_firmware
         sudo find bin -type f -exec sudo cp {} /tmp/bin_firmware/ \;
 
