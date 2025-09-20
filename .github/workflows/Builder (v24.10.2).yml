@@ -62,6 +62,10 @@ jobs:
         sudo cp $UCI_CUSTOM_FILE $ROOT_DIRECTORY/files/etc/uci-defaults
         # Copy packages list
         sudo cp $PACKAGES_LIST_FILE $ROOT_DIRECTORY/files/packages.list
+        # Ensure uci is included in packages.list to avoid 'uci: command not found' errors
+        if ! grep -q "^uci$" $ROOT_DIRECTORY/files/packages.list; then
+          echo "uci" | sudo tee -a $ROOT_DIRECTORY/files/packages.list > /dev/null
+        fi
         # Copy ipk files
         sudo cp $PACKAGES_FOLDER/*.ipk $ROOT_DIRECTORY/packages
 
