@@ -1,4 +1,4 @@
-name: Build [A](https://firmware-selector.immortalwrt.org/?version=24.10.2&target=x86/64&id=generic&copilot_analytics_metadata=eyJldmVudEluZm9fY2xpY2tEZXN0aW5hdGlvbiI6Imh0dHBzOlwvXC9maXJtd2FyZS1zZWxlY3Rvci5pbW1vcnRhbHdydC5vcmdcLz92ZXJzaW9uPTI0LjEwLjImdGFyZ2V0PXg4NiUyRjY0JmlkPWdlbmVyaWMiLCJldmVudEluZm9fbWVzc2FnZUlkIjoicFlQMkJXS3ozTGV2ZkNXYlNDVG9BIiwiZXZlbnRJbmZvX2NsaWNrU291cmNlIjoiY2l0YXRpb25MaW5rIiwiZXZlbnRJbmZvX2NvbnZlcnNhdGlvbklkIjoieXN2UU5HRlU0TUR6aW5EcUFIZ29wIn0%3D&citationMarker=9F742443-6C92-4C44-BF58-8F5A7C53B6F1) ImmortalWrt with ImageBuilder
+name: Build [A]
 
 on:
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
         run: |
           # Compose the ImageBuilder archive name as used by ImmortalWrt
           # Example:
-          # https://downloads.immortalwrt.org/releases/24.10.2/targets/x86/64/immortalwrt-imagebuilder-24.10.2-x86-64.Linux-x86_64.tar.xz
+          # https://downloads.immortalwrt.org/releases/24.10.2/targets/x86/64/immortalwrt-imagebuilder-24.10.2-x86-64.Linux-x86_64.tar.zst
           IB_NAME="immortalwrt-imagebuilder-${VERSION}-${TARGET}-${SUBTARGET}.Linux-x86_64"
           IB_URL="https://downloads.immortalwrt.org/releases/${VERSION}/targets/${TARGET}/${SUBTARGET}/${IB_NAME}.tar.xz"
           echo "name=${IB_NAME}" >> $GITHUB_OUTPUT
