@@ -27,8 +27,7 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get full-upgrade -y
-        #sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 python3-lib2to3 zstd qemu-utils genisoimage  
-        sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+        sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 python3-lib2to3 zstd qemu-utils genisoimage
         
     - name: Download and extract Image Builder
       run: |
@@ -65,6 +64,14 @@ jobs:
         sudo cp $PACKAGES_LIST_FILE $ROOT_DIRECTORY/files/packages.list
         # Copy ipk files
         sudo cp $PACKAGES_FOLDER/*.ipk $ROOT_DIRECTORY/packages
+
+    - name: Modify homeproxy init script
+      run: |
+        # 检查 homeproxy 初始化脚本是否存在
+        if [ -f "$ROOT_DIRECTORY/files/etc/init.d/homeproxy" ]; then
+          # 在 uci 命令前添加检查，如果 uci 不存在则跳过
+          sudo sed -i '/uci:/a\    command -v uci >/dev/null || exit 0' $ROOT_DIRECTORY/files/etc/init.d/homeproxy
+        fi
 
     - name: Compile firmware
       run: |
