@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write   # 关键修复：允许删除 workflow runs
 
 env:
   PROFILE: generic
@@ -113,6 +114,7 @@ jobs:
       with:
         retain_days: 0
         keep_minimum_runs: 2
+        token: ${{ secrets.GITHUB_TOKEN }}   # 显式传入 token
 
     - name: Remove old releases
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
