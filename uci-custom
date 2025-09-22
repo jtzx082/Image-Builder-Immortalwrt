@@ -12,3 +12,9 @@ echo -e "password\npassword" | passwd root
 
 # 应用更改
 uci commit network
+
+# 设置uci
+uci set homeproxy.config.enabled='1'
+uci commit homeproxy
+
+
