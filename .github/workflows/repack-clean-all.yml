@@ -1,0 +1,375 @@
+name: Universal OpenWrt Repack (Auto-Clean & Build All)
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # 每天 UTC 2:00 (北京时间 10:00) 自动运行
+  workflow_dispatch:
+    inputs:
+      plugin_name:
+        description: 'Select Plugin to Repack'
+        required: true
+        default: 'All'
+        type: choice
+        options:
+          - All
+          - Nikki
+          - Passwall
+          - Passwall2
+          - DDNS-Go
+          - Argon-Theme
+          - OpenClash
+          - HomeProxy
+          - iStore
+      tag_name:
+        description: 'Target Tag (Leave empty for auto-detect)'
+        required: false
+
+# 授予最高权限以执行删除和发布操作
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  # ============================================================================
+  # 任务 1: 全局大扫除 (最先执行)
+  # ============================================================================
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 🗑️ Delete ALL Completed Workflow Runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching list of ALL completed workflow runs..."
+          # 获取所有状态为 completed 的运行记录 ID (排除当前正在运行的)
+          RUN_IDS=$(gh run list --status completed --limit 1000 --json databaseId -q '.[].databaseId' || echo "")
+          
+          if [ -n "$RUN_IDS" ]; then
+            COUNT=$(echo "$RUN_IDS" | wc -w)
+            echo "Found $COUNT completed runs. Deleting..."
+            for RUN_ID in $RUN_IDS; do
+              gh run delete "$RUN_ID" || true
+            done
+            echo "✅ All completed workflow runs cleared."
+          else
+            echo "No completed runs found."
+          fi
+
+      - name: 🗑️ Delete ALL Existing Releases & Tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching all existing releases..."
+          TAGS=$(gh release list --limit 1000 --json tagName -q '.[].tagName' || echo "")
+          
+          if [ -n "$TAGS" ]; then
+            echo "Found releases. Deleting..."
+            for TAG in $TAGS; do
+              # --cleanup-tag 同时删除 Release 和 Git Tag
+              gh release delete "$TAG" --cleanup-tag --yes || echo "Warning: Failed to delete $TAG"
+            done
+            echo "✅ All old releases cleared."
+          else
+            echo "No releases found."
+          fi
+
+  # ============================================================================
+  # 任务 2: 准备构建矩阵 (依赖 cleanup 完成)
+  # ============================================================================
+  matrix_prep:
+    needs: cleanup
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          # 定义所有插件源
+          # 注意：HomeProxy 和 iStore 使用特殊的 repo 标识符，触发特定的抓取逻辑
+          json_data='[
+            {"id": "nikki", "name": "Nikki", "repo": "nikkinikki-org/OpenWrt-nikki", "keyword": "*x86_64*.tar.gz"},
+            {"id": "passwall", "name": "Passwall", "repo": "xiaorouji/openwrt-passwall", "keyword": "*packages*ipk*x86_64*.zip"},
+            {"id": "passwall2", "name": "Passwall2", "repo": "xiaorouji/openwrt-passwall2", "keyword": "*packages*ipk*x86_64*.zip"},
+            {"id": "ddns-go", "name": "DDNS-Go", "repo": "sirpdboy/luci-app-ddns-go", "keyword": "*"},
+            {"id": "argon", "name": "Argon-Theme", "repo": "jerrykuku/luci-theme-argon", "keyword": "*.ipk"},
+            {"id": "openclash", "name": "OpenClash", "repo": "vernesong/OpenClash", "keyword": "*.ipk"},
+            {"id": "homeproxy", "name": "HomeProxy", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"},
+            {"id": "istore", "name": "iStore", "repo": "ISTORE_REPO", "keyword": "web_scrape"}
+          ]'
+
+          INPUT_PLUGIN="${{ inputs.plugin_name }}"
+          EVENT_NAME="${{ github.event_name }}"
+          
+          # 自动任务或选择All时，打包所有插件
+          if [ "$EVENT_NAME" == "schedule" ] || [ "$INPUT_PLUGIN" == "All" ] || [ -z "$INPUT_PLUGIN" ]; then
+            FINAL_JSON="$json_data"
+          else
+            # 否则根据选择生成单一任务
+            case "$INPUT_PLUGIN" in
+              "Nikki")       FINAL_JSON='[{"id": "nikki", "name": "Nikki", "repo": "nikkinikki-org/OpenWrt-nikki", "keyword": "*x86_64*.tar.gz"}]' ;;
+              "Passwall")    FINAL_JSON='[{"id": "passwall", "name": "Passwall", "repo": "xiaorouji/openwrt-passwall", "keyword": "*packages*ipk*x86_64*.zip"}]' ;;
+              "Passwall2")   FINAL_JSON='[{"id": "passwall2", "name": "Passwall2", "repo": "xiaorouji/openwrt-passwall2", "keyword": "*packages*ipk*x86_64*.zip"}]' ;;
+              "DDNS-Go")     FINAL_JSON='[{"id": "ddns-go", "name": "DDNS-Go", "repo": "sirpdboy/luci-app-ddns-go", "keyword": "*"}]' ;;
+              "Argon-Theme") FINAL_JSON='[{"id": "argon", "name": "Argon-Theme", "repo": "jerrykuku/luci-theme-argon", "keyword": "*.ipk"}]' ;;
+              "OpenClash")   FINAL_JSON='[{"id": "openclash", "name": "OpenClash", "repo": "vernesong/OpenClash", "keyword": "*.ipk"}]' ;;
+              "HomeProxy")   FINAL_JSON='[{"id": "homeproxy", "name": "HomeProxy", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"}]' ;;
+              "iStore")      FINAL_JSON='[{"id": "istore", "name": "iStore", "repo": "ISTORE_REPO", "keyword": "web_scrape"}]' ;;
+              *)             FINAL_JSON="$json_data" ;;
+            esac
+          fi
+
+          # 压缩 JSON 为单行并输出
+          COMPACT_JSON=$(echo "$FINAL_JSON" | jq -c .)
+          echo "matrix={\"include\":$COMPACT_JSON}" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # 任务 3: 执行打包 (矩阵并行)
+  # ============================================================================
+  repack:
+    needs: matrix_prep
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📥 Smart Download (${{ matrix.name }})
+        id: process
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: ${{ matrix.repo }}
+          KEYWORD: ${{ matrix.keyword }}
+          MANUAL_TAG: ${{ inputs.tag_name }}
+        run: |
+          set +o pipefail
+          mkdir -p raw_files staging_dir
+
+          # ------------------------------------------------------------------
+          # 分支 A: iStoreOS 仓库抓取 (iStore)
+          # ------------------------------------------------------------------
+          if [ "$UPSTREAM_REPO" == "ISTORE_REPO" ]; then
+             echo ">>> Mode: iStoreOS Web Scrape..."
+             REPO_URL="https://repo.istoreos.com/repo/all/store/"
+             TARGETS="luci-app-store luci-lib-taskd luci-lib-xterm taskd"
+             
+             TEMP_DIR="temp_download"
+             mkdir -p "$TEMP_DIR"
+             
+             PAGE_CONTENT=$(curl -sL "$REPO_URL")
+             
+             for TARGET in $TARGETS; do
+                echo "--> Hunting for: $TARGET"
+                FILE_NAME=$(echo "$PAGE_CONTENT" | grep -oP "href=\"\K${TARGET}[^\"]+\.ipk" | sort -V | tail -n 1)
+                
+                if [ -n "$FILE_NAME" ]; then
+                   echo "    Found: $FILE_NAME"
+                   curl -sL -o "$TEMP_DIR/$FILE_NAME" "${REPO_URL}${FILE_NAME}"
+                else
+                   echo "    [WARN] Package $TARGET not found!"
+                fi
+             done
+             
+             if [ ! -f "$TEMP_DIR"/luci-app-store*.ipk ]; then
+                echo "Error: Main package luci-app-store not found."
+                exit 1
+             fi
+             
+             VERSION=$(ls "$TEMP_DIR"/luci-app-store*.ipk | grep -oP 'store_\K[0-9.-]+')
+             echo "Detected Version: $VERSION"
+             
+             cp "$TEMP_DIR"/*.ipk raw_files/
+             rm -rf "$TEMP_DIR"
+             echo "final_tag=v$VERSION" >> $GITHUB_OUTPUT
+
+          # ------------------------------------------------------------------
+          # 分支 B: ImmortalWrt 仓库抓取 (HomeProxy)
+          # ------------------------------------------------------------------
+          elif [ "$UPSTREAM_REPO" == "IMMORTALWRT_REPO" ]; then
+             echo ">>> Mode: ImmortalWrt Web Scrape for HomeProxy..."
+             BASE_URL="https://downloads.immortalwrt.org/releases"
+             
+             if [ -n "$MANUAL_TAG" ]; then
+                RAW_VER="$MANUAL_TAG"
+             else
+                # 清洗版本号
+                RAW_VER=$(curl -sL "$BASE_URL/" | grep -oP 'href="\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n 1 | tr -d '\r\n[:space:]')
+             fi
+             
+             if [ -z "$RAW_VER" ]; then echo "Error: Failed to detect version."; exit 1; fi
+             
+             echo "Target Version: [$RAW_VER]"
+             FINAL_TAG="v$RAW_VER"
+             
+             PKG_ROOT="$BASE_URL/$RAW_VER/packages/x86_64"
+             TARGETS="luci-app-homeproxy luci-i18n-homeproxy-zh-cn sing-box chinadns-ng"
+             
+             TEMP_DIR="temp_download"
+             mkdir -p "$TEMP_DIR"
+             SUB_DIRS="luci packages base"
+             
+             for TARGET in $TARGETS; do
+                FOUND_FILE=false
+                for SUB in $SUB_DIRS; do
+                   SEARCH_URL="$PKG_ROOT/$SUB/"
+                   FILE_NAME=$(curl -sL "$SEARCH_URL" | grep -oP "href=\"\K${TARGET}[^\"]+\.ipk" | sort -V | tail -n 1 | tr -d '\r\n[:space:]')
+                   if [ -n "$FILE_NAME" ]; then
+                      echo "    Found: $FILE_NAME"
+                      curl -sL -o "$TEMP_DIR/$FILE_NAME" "$SEARCH_URL$FILE_NAME"
+                      FOUND_FILE=true
+                      break 
+                   fi
+                done
+             done
+             
+             if [ -z "$(ls -A "$TEMP_DIR")" ]; then echo "Error: Download failed."; exit 1; fi
+             cp "$TEMP_DIR"/*.ipk raw_files/
+             rm -rf "$TEMP_DIR"
+             echo "final_tag=$FINAL_TAG" >> $GITHUB_OUTPUT
+
+          # ------------------------------------------------------------------
+          # 分支 C: 常规 GitHub Release 下载
+          # ------------------------------------------------------------------
+          else
+             echo ">>> Mode: GitHub Release Download..."
+             if [ -n "$MANUAL_TAG" ]; then
+               TAGS="$MANUAL_TAG"
+             else
+               TAGS=$(gh release list --repo $UPSTREAM_REPO --limit 5 --json tagName -q '.[].tagName' || echo "")
+             fi
+             
+             FOUND_VALID=false
+             FINAL_TAG=""
+
+             for TAG in $TAGS; do
+               TEMP_DIR="temp_$TAG"
+               mkdir -p "$TEMP_DIR"
+               gh release download "$TAG" --repo "$UPSTREAM_REPO" --pattern "$KEYWORD" --dir "$TEMP_DIR" --clobber 2>/dev/null || true
+               # Passwall 额外下载 LuCI
+               case "$UPSTREAM_REPO" in
+                 *"passwall"*) gh release download "$TAG" --repo "$UPSTREAM_REPO" --pattern "*luci*.ipk" --dir "$TEMP_DIR" --clobber 2>/dev/null || true ;;
+               esac
+
+               if [ -z "$(ls -A "$TEMP_DIR")" ]; then rm -rf "$TEMP_DIR"; continue; fi
+               
+               # 解压
+               find "$TEMP_DIR" -name "*.zip" -exec unzip -o -q {} -d "$TEMP_DIR" \;
+               find "$TEMP_DIR" -name "*.tar.gz" -exec tar xzf {} -C "$TEMP_DIR" \;
+
+               # 验证 x86/all
+               IPK_FILES=$(find "$TEMP_DIR" -name "*.ipk")
+               VALID_FILES=$(echo "$IPK_FILES" | grep -vE "aarch64|arm|mips|riscv|i386" || true)
+               VALID_COUNT=$(echo "$VALID_FILES" | grep -cve '^\s*$' || echo 0)
+
+               if [ "$VALID_COUNT" -gt 0 ]; then
+                 echo "$VALID_FILES" | while read -r file; do [ -n "$file" ] && cp "$file" raw_files/; done
+                 rm -rf "$TEMP_DIR"
+                 FOUND_VALID=true
+                 FINAL_TAG="$TAG"
+                 break
+               else
+                 rm -rf "$TEMP_DIR"
+               fi
+             done
+             
+             if [ "$FOUND_VALID" = "false" ]; then echo "Error: No valid releases found."; exit 1; fi
+             echo "final_tag=$FINAL_TAG" >> $GITHUB_OUTPUT
+          fi
+          
+          # 汇总文件到 staging_dir
+          cp raw_files/*.ipk staging_dir/ 2>/dev/null || true
+
+      - name: 📦 Build .run Installer
+        id: build
+        run: |
+          TAG="${{ steps.process.outputs.final_tag }}"
+          NAME="${{ matrix.id }}"
+          FILENAME="${NAME}-x86_64-installer-${TAG}.run"
+          
+          cd staging_dir
+          if [ -z "$(ls -A *.ipk 2>/dev/null)" ]; then echo "Error: No ipk files to package!"; exit 1; fi
+          tar czf ../payload.tar.gz *.ipk
+          cd ..
+          
+          # 创建安装脚本 (包含锁检测和依赖提示)
+          cat << 'EOF' > install_header.sh
+          #!/bin/sh
+          GREEN='\033[0;32m'
+          BLUE='\033[0;34m'
+          NC='\033[0m'
+          echo -e "${BLUE}=========================================${NC}"
+          echo -e "${GREEN}   OpenWrt Auto-Installer (x86_64)      ${NC}"
+          echo -e "${BLUE}=========================================${NC}"
+          
+          TMP_DIR="/tmp/install_temp_$$"
+          mkdir -p "$TMP_DIR"
+          
+          echo -e "-> Extracting payload..."
+          ARCHIVE_START_LINE=$(awk '/^__PAYLOAD_BEGINS__/ {print NR + 1; exit 0; }' "$0")
+          tail -n +$ARCHIVE_START_LINE "$0" | tar xz -C "$TMP_DIR"
+          if [ $? -ne 0 ]; then echo "Error: Extraction failed."; rm -rf "$TMP_DIR"; exit 1; fi
+          
+          cd "$TMP_DIR"
+          echo -e "-> Installing packages..."
+          
+          # 检测并解除 opkg 锁
+          LOCK_FILE="/var/lock/opkg.lock"
+          if [ -f "$LOCK_FILE" ]; then
+             echo "-> opkg is locked. Waiting max 15s..."
+             i=0
+             while [ -f "$LOCK_FILE" ] && [ $i -lt 15 ]; do sleep 1; i=$((i+1)); echo -n "."; done
+             echo ""
+             if [ -f "$LOCK_FILE" ]; then echo "-> Forcing unlock..."; rm -f "$LOCK_FILE"; fi
+          fi
+          
+          opkg install *.ipk --force-overwrite
+          STATUS=$?
+          
+          cd /
+          rm -rf "$TMP_DIR"
+          
+          if [ $STATUS -eq 0 ]; then
+            echo -e "${GREEN}SUCCESS!${NC}"
+            rm -rf /tmp/luci-modulecache/
+            rm -f /tmp/luci-indexcache
+            echo "Cache cleared. Please refresh LuCI."
+          else
+            echo -e "WARNING: opkg reported errors."
+            echo "If installing iStore/HomeProxy, ensure system dependencies (like taskd, libubox) are present."
+          fi
+          exit 0
+          __PAYLOAD_BEGINS__
+          EOF
+
+          cat install_header.sh payload.tar.gz > "$FILENAME"
+          chmod +x "$FILENAME"
+          echo "filename=$FILENAME" >> $GITHUB_OUTPUT
+
+      - name: 🕒 Generate Time-Stamped Tag
+        id: tag_gen
+        run: |
+          # 生成时间戳，格式: 2024.12.02-1345
+          DATE_STR=$(date +'%Y.%m.%d-%H%M')
+          echo "date=$DATE_STR" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Create Release (ncipollo)
+        uses: ncipollo/release-action@v1
+        with:
+          # 使用 "插件名-版本-时间戳" 格式，100% 保证唯一，强制生成新 Release 页面
+          tag: ${{ matrix.id }}-${{ steps.process.outputs.final_tag }}_${{ steps.tag_gen.outputs.date }}
+          name: ${{ matrix.name }} ${{ steps.process.outputs.final_tag }} (${{ steps.tag_gen.outputs.date }})
+          body: "Auto-generated installer for ${{ matrix.name }} version ${{ steps.process.outputs.final_tag }}"
+          artifacts: "${{ steps.build.outputs.filename }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # 关键参数：强制非草稿，允许更新，强制最新
+          draft: false
+          prerelease: false
+          makeLatest: true
+          allowUpdates: true
