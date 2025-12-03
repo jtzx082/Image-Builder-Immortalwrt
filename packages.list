@@ -90,4 +90,3 @@ mount-utils
 libuci-lua
 script-utils
 kmod-fs-btrfs
-dockerd
