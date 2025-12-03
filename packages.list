@@ -83,3 +83,9 @@ kmod-inet-diag
 kmod-nft-socket  
 kmod-nft-tproxy  
 kmod-tun
+tar
+coreutils
+coreutils-stty
+mount-utils
+libuci-lua
+script-utils
