@@ -76,13 +76,13 @@ jobs:
       - id: set-matrix
         run: |
           # 定义所有插件源
-          # Dockerman 和 HomeProxy 都使用 IMMORTALWRT_REPO 逻辑，但在下载步骤会区分 ID
+          # 注意：Argon, Dockerman, HomeProxy 现在都使用 IMMORTALWRT_REPO 逻辑
           json_data='[
             {"id": "nikki", "name": "Nikki", "repo": "nikkinikki-org/OpenWrt-nikki", "keyword": "*x86_64*.tar.gz"},
             {"id": "passwall", "name": "Passwall", "repo": "xiaorouji/openwrt-passwall", "keyword": "*packages*ipk*x86_64*.zip"},
             {"id": "passwall2", "name": "Passwall2", "repo": "xiaorouji/openwrt-passwall2", "keyword": "*packages*ipk*x86_64*.zip"},
             {"id": "ddns-go", "name": "DDNS-Go", "repo": "sirpdboy/luci-app-ddns-go", "keyword": "*"},
-            {"id": "argon", "name": "Argon-Theme", "repo": "jerrykuku/luci-theme-argon", "keyword": "*.ipk"},
+            {"id": "argon", "name": "Argon-Theme", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"},
             {"id": "openclash", "name": "OpenClash", "repo": "vernesong/OpenClash", "keyword": "*.ipk"},
             {"id": "homeproxy", "name": "HomeProxy", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"},
             {"id": "dockerman", "name": "Dockerman", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"},
@@ -100,7 +100,7 @@ jobs:
               "Passwall")    FINAL_JSON='[{"id": "passwall", "name": "Passwall", "repo": "xiaorouji/openwrt-passwall", "keyword": "*packages*ipk*x86_64*.zip"}]' ;;
               "Passwall2")   FINAL_JSON='[{"id": "passwall2", "name": "Passwall2", "repo": "xiaorouji/openwrt-passwall2", "keyword": "*packages*ipk*x86_64*.zip"}]' ;;
               "DDNS-Go")     FINAL_JSON='[{"id": "ddns-go", "name": "DDNS-Go", "repo": "sirpdboy/luci-app-ddns-go", "keyword": "*"}]' ;;
-              "Argon-Theme") FINAL_JSON='[{"id": "argon", "name": "Argon-Theme", "repo": "jerrykuku/luci-theme-argon", "keyword": "*.ipk"}]' ;;
+              "Argon-Theme") FINAL_JSON='[{"id": "argon", "name": "Argon-Theme", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"}]' ;;
               "OpenClash")   FINAL_JSON='[{"id": "openclash", "name": "OpenClash", "repo": "vernesong/OpenClash", "keyword": "*.ipk"}]' ;;
               "HomeProxy")   FINAL_JSON='[{"id": "homeproxy", "name": "HomeProxy", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"}]' ;;
               "Dockerman")   FINAL_JSON='[{"id": "dockerman", "name": "Dockerman", "repo": "IMMORTALWRT_REPO", "keyword": "web_scrape"}]' ;;
@@ -168,7 +168,7 @@ jobs:
              echo "final_tag=v$VERSION" >> $GITHUB_OUTPUT
 
           # ------------------------------------------------------------------
-          # 分支 B: ImmortalWrt Repo (HomeProxy & Dockerman)
+          # 分支 B: ImmortalWrt Repo (HomeProxy, Dockerman, Argon)
           # ------------------------------------------------------------------
           elif [ "$UPSTREAM_REPO" == "IMMORTALWRT_REPO" ]; then
              echo ">>> Mode: ImmortalWrt Web Scrape for $PLUGIN_ID..."
@@ -190,9 +190,11 @@ jobs:
                 TARGETS="luci-app-homeproxy luci-i18n-homeproxy-zh-cn sing-box chinadns-ng"
                 SUB_DIRS="luci packages base"
              elif [ "$PLUGIN_ID" == "dockerman" ]; then
-                # Dockerman 需要完整的 Docker 运行时依赖
                 TARGETS="luci-app-dockerman luci-i18n-dockerman-zh-cn luci-lib-docker ttyd docker dockerd docker-compose libcap libuv1 libwebsockets-full cgroupfs-mount"
                 SUB_DIRS="luci packages base routing"
+             elif [ "$PLUGIN_ID" == "argon" ]; then
+                TARGETS="luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
+                SUB_DIRS="luci packages base"
              fi
              
              TEMP_DIR="temp_download"
@@ -202,12 +204,12 @@ jobs:
                 FOUND_FILE=false
                 for SUB in $SUB_DIRS; do
                    SEARCH_URL="$PKG_ROOT/$SUB/"
+                   # 使用精准匹配
                    FILE_NAME=$(curl -sL "$SEARCH_URL" | grep -oP "href=\"\K${TARGET}[_\.][^\"]+\.ipk" | sort -V | tail -n 1 | tr -d '\r\n[:space:]')
                    if [ -n "$FILE_NAME" ]; then
                       echo "    Found $TARGET: $FILE_NAME"
                       curl -sL -o "$TEMP_DIR/$FILE_NAME" "$SEARCH_URL$FILE_NAME"
                       
-                      # 检查文件大小，避免下载空文件
                       if [ -s "$TEMP_DIR/$FILE_NAME" ]; then
                          FOUND_FILE=true
                          break 
@@ -334,7 +336,7 @@ jobs:
           __PAYLOAD_BEGINS__
           EOF
           
-          # 动态注入 PLUGIN_ID 变量到脚本中 (简单的 sed 替换)
+          # 动态注入 PLUGIN_ID 变量到脚本中
           sed -i "s/\$PLUGIN_ID/$PLUGIN_ID/g" install_header.sh
 
           cat install_header.sh payload.tar.gz > "$FILENAME"
