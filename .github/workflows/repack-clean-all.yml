@@ -1,8 +1,8 @@
 name: Universal OpenWrt Repack (All-in-One)
 
 on:
-  schedule:
-    - cron: '0 2 * * *' # 每天 UTC 2:00 (北京时间 10:00) 自动运行
+#  schedule:
+#    - cron: '0 2 * * *' # 每天 UTC 2:00 (北京时间 10:00) 自动运行
   workflow_dispatch:
     inputs:
       plugin_name:
